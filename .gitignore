@@ -57,6 +57,7 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .firebase/
+extensions/
 
 # Node modules (for Firebase Functions)
 **/node_modules/
