@@ -24,37 +24,73 @@ class FeeService {
     });
   }
 
-  // STUDENT: Get Fee Components
+  // STUDENT: Get Fee Components (Aggregated/Additive)
   Future<Map<String, dynamic>?> getFeeComponents(String dept, String quotaCategory, String batch, String semester) async {
-    // Priority order with isActive filter:
-    // 1. Exact match: batch_dept_quota_semester
-    // 2. All dept: batch_All_quota_semester
-    // 3. All quota: batch_dept_All_semester
-    // 4. All both: batch_All_All_semester
+    // We want to fetch all matching configurations and merge them.
+    // Order: General -> Specific (Specific overrides General if key matches)
     
-    List<Map<String, String>> queries = [
-      {'dept': dept, 'quotaCategory': quotaCategory},  // Exact
-      {'dept': 'All', 'quotaCategory': quotaCategory}, // All dept
-      {'dept': dept, 'quotaCategory': 'All'},          // All quota
-      {'dept': 'All', 'quotaCategory': 'All'},         // All both
+    List<Map<String, String>> searchLevels = [
+      {'dept': 'All', 'quotaCategory': 'All'},         // 1. Most General
+      {'dept': dept, 'quotaCategory': 'All'},          // 2. Specific Dept
+      {'dept': 'All', 'quotaCategory': quotaCategory}, // 3. Specific Quota
+      {'dept': dept, 'quotaCategory': quotaCategory},  // 4. Most Specific
     ];
     
-    for (var query in queries) {
+    Map<String, dynamic> combinedComponents = {};
+    DateTime? latestDeadline;
+
+    bool foundAny = false;
+
+    for (var level in searchLevels) {
       QuerySnapshot snapshot = await _db.collection('fee_structures')
           .where('academicYear', isEqualTo: batch)
-          .where('dept', isEqualTo: query['dept'])
-          .where('quotaCategory', isEqualTo: query['quotaCategory'])
+          .where('dept', isEqualTo: level['dept'])
+          .where('quotaCategory', isEqualTo: level['quotaCategory'])
           .where('semester', isEqualTo: semester)
           .where('isActive', isEqualTo: true)
           .limit(1)
           .get();
           
       if (snapshot.docs.isNotEmpty) {
-        return snapshot.docs.first.data() as Map<String, dynamic>;
+        foundAny = true;
+        final data = snapshot.docs.first.data() as Map<String, dynamic>;
+        
+        // Merge components
+        if (data['components'] != null) {
+          combinedComponents.addAll(Map<String, dynamic>.from(data['components']));
+        }
+        
+        // Take the latest/most specific deadline if available
+        if (data['deadline'] != null) {
+          latestDeadline = (data['deadline'] as Timestamp).toDate();
+        }
       }
     }
     
-    return null;
+    if (!foundAny) return null;
+
+    // Calculate total for the combined set
+    double total = 0;
+    combinedComponents.forEach((key, value) {
+      if (value is Map) {
+        // Bus fee logic (summing routes is standard here for total display, 
+        // though student chooses one in detail screen)
+        (value as Map).values.forEach((amt) => total += (amt as num).toDouble());
+      } else {
+        total += (value as num).toDouble();
+      }
+    });
+
+    return {
+      'academicYear': batch,
+      'dept': dept,
+      'quotaCategory': quotaCategory,
+      'semester': semester,
+      'components': combinedComponents,
+      'totalAmount': total,
+      'deadline': latestDeadline != null ? Timestamp.fromDate(latestDeadline) : null,
+      'isActive': true,
+    };
   }
 
   // STUDENT: Submit Proof for Specific Component

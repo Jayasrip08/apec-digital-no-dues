@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../login_screen.dart';
@@ -141,6 +142,20 @@ class _StudentDashboardState extends State<StudentDashboard> {
                                       fontWeight: FontWeight.bold,
                                       fontSize: 14
                                     ),
+                                  ),
+                                const SizedBox(height: 4),
+                                // Display Date Range
+                                if (semesterData['startDate'] != null && semesterData['endDate'] != null)
+                                  Builder(
+                                    builder: (context) {
+                                      final start = (semesterData['startDate'] as Timestamp).toDate();
+                                      final end = (semesterData['endDate'] as Timestamp).toDate();
+                                      final dateFormat = DateFormat('dd MMM yyyy');
+                                      return Text(
+                                        "${dateFormat.format(start)} - ${dateFormat.format(end)}",
+                                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                                      );
+                                    }
                                   ),
                                 const SizedBox(height: 5),
                                 const Text("Tap to view fees & upload bills", style: TextStyle(color: Colors.grey)),

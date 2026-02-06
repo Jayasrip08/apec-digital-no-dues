@@ -88,19 +88,24 @@ APEC Administration
 
     try {
       // Get all overdue fee structures
-      final overdueStructures = await _db
+      // Get all overdue fee structures
+      // OPTIMIZATION: Filter deadline client-side to avoid composite index requirement
+      final activeStructures = await _db
           .collection('fee_structures')
-          .where('deadline', isLessThan: Timestamp.now())
           .where('isActive', isEqualTo: true)
           .get();
 
-      for (var feeDoc in overdueStructures.docs) {
+      for (var feeDoc in activeStructures.docs) {
         final feeData = feeDoc.data();
+        final deadline = (feeData['deadline'] as Timestamp).toDate();
+        
+        // Skip if not yet overdue
+        if (deadline.isAfter(DateTime.now())) continue;
+
         final dept = feeData['dept'] ?? '';
         final quota = feeData['quotaCategory'] ?? '';
         final semester = feeData['semester'] ?? '';
         final totalAmount = (feeData['totalAmount'] ?? 0).toDouble();
-        final deadline = (feeData['deadline'] as Timestamp).toDate();
 
         // Get students matching this fee structure
         var studentsQuery = _db

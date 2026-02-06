@@ -63,30 +63,56 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  bool _loadingBusPlaces = false; // Add loading state
+
   Future<void> _loadBusPlaces() async {
+    setState(() => _loadingBusPlaces = true);
     try {
+      // Fetch fee structures to get bus places - Get MOST RECENT active one
       // Fetch fee structures to get bus places
+      // OPTIMIZATION: Fetch all active structures and sort client-side to avoid needing a Firestore composite index
       final snapshot = await FirebaseFirestore.instance
           .collection('fee_structures')
-          .limit(1)
+          .where('isActive', isEqualTo: true)
           .get();
       
-      if (snapshot.docs.isNotEmpty) {
-        final data = snapshot.docs.first.data();
+      final docs = snapshot.docs.toList();
+      // Sort by lastUpdated descending (newest first)
+      docs.sort((a, b) {
+        final aTime = (a.data()['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime(2000);
+        final bTime = (b.data()['lastUpdated'] as Timestamp?)?.toDate() ?? DateTime(2000);
+        return bTime.compareTo(aTime);
+      });
+      
+      List<String> foundPlaces = [];
+      
+      for (var doc in docs) {
+        final data = doc.data();
         final components = data['components'] as Map<String, dynamic>?;
         
         if (components != null && components['Bus Fee'] is Map) {
           final busFeeMap = components['Bus Fee'] as Map<String, dynamic>;
-          setState(() {
-            _availableBusPlaces = busFeeMap.keys.toList().cast<String>();
-            if (_availableBusPlaces.isNotEmpty) {
-              _selectedBusPlace = _availableBusPlaces.first;
-            }
-          });
+          if (busFeeMap.isNotEmpty) {
+            foundPlaces = busFeeMap.keys.toList().cast<String>();
+            break; // Found one with bus fees, stop looking
+          }
         }
+      }
+
+      if (mounted) {
+        setState(() {
+          _availableBusPlaces = foundPlaces;
+          if (_availableBusPlaces.isNotEmpty) {
+            _selectedBusPlace = _availableBusPlaces.first;
+          } else {
+             _selectedBusPlace = null;
+          }
+          _loadingBusPlaces = false;
+        });
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _loadingBusPlaces = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error loading bus routes: $e')),
         );
@@ -195,15 +221,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       // CONDITIONAL FIELDS
                       if (_selectedRole == 'student' || _selectedRole == 'staff') ...[
                         const _SectionHeader(title: "Academic Context"),
-                        DropdownButtonFormField(
-                          value: _selectedDept,
-                          decoration: InputDecoration(
-                            labelText: "Department", 
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.account_balance_outlined),
-                          ),
-                          items: ['CSE', 'ECE', 'MECH', 'CIVIL', 'IT'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                          onChanged: (val) => setState(() => _selectedDept = val.toString()),
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('departments').orderBy('name').snapshots(),
+                          builder: (context, snapshot) {
+                            List<String> depts = [];
+                            if (snapshot.hasData) {
+                              depts = snapshot.data!.docs.map((d) => d['name'] as String).toList();
+                            }
+                            if (depts.isEmpty) depts = ['CSE', 'ECE', 'MECH', 'CIVIL']; // Fallback
+
+                            return DropdownButtonFormField(
+                              value: depts.contains(_selectedDept) ? _selectedDept : null,
+                              decoration: InputDecoration(
+                                labelText: "Department", 
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                prefixIcon: const Icon(Icons.account_balance_outlined),
+                              ),
+                              items: depts.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                              onChanged: (val) => setState(() => _selectedDept = val.toString()),
+                              validator: (val) => val == null ? 'Please select a department' : null,
+                            );
+                          }
                         ),
                         const SizedBox(height: 16),
                       ],
@@ -221,15 +259,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             onChanged: (val) => setState(() => _selectedBatch = val.toString()),
                           ),
                         const SizedBox(height: 16),
-                        DropdownButtonFormField(
-                          value: _selectedQuota,
-                          decoration: InputDecoration(
-                            labelText: "Admission Quota",
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            prefixIcon: const Icon(Icons.assignment_ind_outlined),
-                          ),
-                          items: ['Management', 'Counseling', 'SC_ST', '7.5_Reservation'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-                          onChanged: (val) => setState(() => _selectedQuota = val.toString()),
+                        StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance.collection('quotas').orderBy('name').snapshots(),
+                          builder: (context, snapshot) {
+                            List<String> quotas = [];
+                            if (snapshot.hasData) {
+                              quotas = snapshot.data!.docs.map((d) => d['name'] as String).toList();
+                            }
+                            if (quotas.isEmpty) quotas = ['Management', 'Counseling']; // Fallback
+
+                            // Ensure default is valid or null
+                            String? validQuota = quotas.contains(_selectedQuota) ? _selectedQuota : (quotas.isNotEmpty ? quotas.first : null);
+
+                            return DropdownButtonFormField(
+                              value: validQuota,
+                              decoration: InputDecoration(
+                                labelText: "Admission Quota",
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                prefixIcon: const Icon(Icons.assignment_ind_outlined),
+                              ),
+                              items: quotas.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                              onChanged: (val) => setState(() => _selectedQuota = val.toString()),
+                              validator: (val) => val == null ? 'Please select a quota' : null,
+                            );
+                          }
                         ),
                         const SizedBox(height: 16),
                         DropdownButtonFormField<String>(
@@ -251,18 +304,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             });
                           },
                         ),
-                        if (_selectedStudentType == 'bus_user' && _availableBusPlaces.isNotEmpty) ...[
+                        
+                        // BUS ROUTE SECTION
+                        if (_selectedStudentType == 'bus_user') ...[
                           const SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            value: _selectedBusPlace,
-                            decoration: InputDecoration(
-                              labelText: "Bus Route",
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                              prefixIcon: const Icon(Icons.bus_alert_outlined),
+                          if (_loadingBusPlaces)
+                            const Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: Row(children: [CircularProgressIndicator.adaptive(), SizedBox(width: 10), Text("Loading bus routes...")]),
+                            )
+                          else if (_availableBusPlaces.isNotEmpty)
+                            DropdownButtonFormField<String>(
+                              value: _selectedBusPlace,
+                              decoration: InputDecoration(
+                                labelText: "Bus Route",
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                prefixIcon: const Icon(Icons.bus_alert_outlined),
+                              ),
+                              items: _availableBusPlaces.map((place) => DropdownMenuItem(value: place, child: Text(place))).toList(),
+                              onChanged: (val) => setState(() => _selectedBusPlace = val),
+                              validator: (v) => v == null ? "Please select your bus route" : null,
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(8)),
+                              child: const Row(
+                                children: [
+                                  Icon(Icons.warning_amber_rounded, color: Colors.orange),
+                                  SizedBox(width: 8),
+                                  Expanded(child: Text("No bus routes defined. Please contact admin to set up bus fees.", style: TextStyle(color: Colors.orange))),
+                                ],
+                              ),
                             ),
-                            items: _availableBusPlaces.map((place) => DropdownMenuItem(value: place, child: Text(place))).toList(),
-                            onChanged: (val) => setState(() => _selectedBusPlace = val),
-                          ),
                         ],
                         const SizedBox(height: 24),
                       ],

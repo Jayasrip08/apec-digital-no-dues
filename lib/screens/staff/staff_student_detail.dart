@@ -24,7 +24,7 @@ class _StaffStudentDetailState extends State<StaffStudentDetail> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.studentData['name'] ?? "Details"),
+        title: const Text("Student Details"),
         actions: [
           // Semester Dropdown in AppBar
           Container(

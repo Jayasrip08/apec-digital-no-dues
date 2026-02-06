@@ -4,7 +4,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 
 class AcademicYearScreen extends StatefulWidget {
-  const AcademicYearScreen({super.key});
+  final Widget? drawer;
+  const AcademicYearScreen({super.key, this.drawer});
 
   @override
   State<AcademicYearScreen> createState() => _AcademicYearScreenState();
@@ -130,12 +131,38 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
   }
 
   // Create Semester
-  Future<void> _createSemester(String academicYearId) async {
-
+  Future<void> _createSemester({String? preSelectedBatchId}) async {
+    String? selectedBatchId = preSelectedBatchId;
     int? selectedSemesterNumber;
     DateTime? startDate;
     DateTime? endDate;
-    final sessionController = TextEditingController(); // Added session controller
+
+    // Fetch Active Batches
+    final activeBatchesSnapshot = await FirebaseFirestore.instance
+        .collection('academic_years')
+        .where('isActive', isEqualTo: true)
+        .get();
+
+    final activeBatches = activeBatchesSnapshot.docs.map((doc) {
+      return {'id': doc.id, 'name': doc['name'] as String};
+    }).toList();
+
+    if (activeBatches.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No active batches found. Please activate a batch first.')),
+        );
+      }
+      return;
+    }
+
+    // If preSelectedBatch is provided but not active, warn user?
+    // Or just let them select from active ones.
+    if (selectedBatchId != null && !activeBatches.any((b) => b['id'] == selectedBatchId)) {
+        selectedBatchId = null; // Reset if not active
+    }
+
+    if (!mounted) return;
 
     final result = await showDialog<bool>(
       context: context,
@@ -146,14 +173,25 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField( // Added session field
-                  controller: sessionController,
+                // Batch Selection
+                DropdownButtonFormField<String>(
+                  value: selectedBatchId,
                   decoration: const InputDecoration(
-                    labelText: 'Academic Session (e.g., 2024-25)',
+                    labelText: 'Select Batch',
                     border: OutlineInputBorder(),
                   ),
+                  items: activeBatches.map((batch) {
+                    return DropdownMenuItem<String>(
+                      value: batch['id'],
+                      child: Text(batch['name']!),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    setDialogState(() => selectedBatchId = value);
+                  },
                 ),
                 const SizedBox(height: 16),
+                
                 DropdownButtonFormField<int>(
                   value: selectedSemesterNumber,
                   decoration: const InputDecoration(
@@ -171,10 +209,17 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                ListTile(
-                  title: const Text('Start Date'),
-                  subtitle: Text(startDate != null ? DateFormat('dd/MM/yyyy').format(startDate!) : 'Not selected'),
-                  trailing: const Icon(Icons.calendar_today),
+                const SizedBox(height: 16),
+                
+                // Start Date Input
+                TextFormField(
+                  readOnly: true,
+                  controller: TextEditingController(text: startDate != null ? DateFormat('dd/MM/yyyy').format(startDate!) : ''),
+                  decoration: const InputDecoration(
+                    labelText: 'Start Date (Format: DD/MM/YYYY)',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.calendar_today),
+                  ),
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -187,10 +232,18 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
                     }
                   },
                 ),
-                ListTile(
-                  title: const Text('End Date'),
-                  subtitle: Text(endDate != null ? DateFormat('dd/MM/yyyy').format(endDate!) : 'Not selected'),
-                  trailing: const Icon(Icons.calendar_today),
+                
+                const SizedBox(height: 16),
+                
+                // End Date Input
+                TextFormField(
+                  readOnly: true,
+                  controller: TextEditingController(text: endDate != null ? DateFormat('dd/MM/yyyy').format(endDate!) : ''),
+                  decoration: const InputDecoration(
+                    labelText: 'End Date (Format: DD/MM/YYYY)',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.event),
+                  ),
                   onTap: () async {
                     final picked = await showDatePicker(
                       context: context,
@@ -220,14 +273,13 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
       ),
     );
 
-    if (result == true && selectedSemesterNumber != null && startDate != null && endDate != null && sessionController.text.isNotEmpty) {
+    if (result == true && selectedBatchId != null && selectedSemesterNumber != null && startDate != null && endDate != null) {
       try {
         await FirebaseFirestore.instance
             .collection('semesters')
             .add({
-          'academicYear': academicYearId,
+          'academicYear': selectedBatchId,
           'semesterNumber': selectedSemesterNumber,
-          'academicSession': sessionController.text, // Saving session
           'startDate': Timestamp.fromDate(startDate!),
           'endDate': Timestamp.fromDate(endDate!),
           'isActive': false,
@@ -263,7 +315,6 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
     int? selectedSemesterNumber = currentData['semesterNumber'];
     DateTime? startDate = (currentData['startDate'] as Timestamp?)?.toDate();
     DateTime? endDate = (currentData['endDate'] as Timestamp?)?.toDate();
-    final sessionController = TextEditingController(text: currentData['academicSession'] ?? '');
 
     final result = await showDialog<bool>(
       context: context,
@@ -274,14 +325,6 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: sessionController,
-                  decoration: const InputDecoration(
-                    labelText: 'Academic Session',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 16),
                 DropdownButtonFormField<int>(
                   value: selectedSemesterNumber,
                   decoration: const InputDecoration(
@@ -355,7 +398,6 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
             .doc(docId)
             .update({
           'semesterNumber': selectedSemesterNumber,
-          'academicSession': sessionController.text,
           'startDate': Timestamp.fromDate(startDate!),
           'endDate': Timestamp.fromDate(endDate!),
         });
@@ -413,6 +455,7 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
         title: const Text('Academic Year Management'),
         backgroundColor: Colors.indigo,
       ),
+      drawer: widget.drawer,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('academic_years')
@@ -459,14 +502,28 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
                         'Existing Batches',
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
-                      ElevatedButton.icon(
-                        onPressed: _createAcademicYear,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Batch'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          foregroundColor: Colors.white,
-                        ),
+                      Row(
+                        children: [
+                           ElevatedButton.icon(
+                            onPressed: () => _createSemester(),
+                            icon: const Icon(Icons.add_circle, color: Colors.white),
+                            label: const Text('New Semester'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.teal,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ElevatedButton.icon(
+                            onPressed: _createAcademicYear,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Batch'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.indigo,
+                              foregroundColor: Colors.white,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -526,17 +583,10 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text(
                                 'Semesters',
                                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              ),
-                              TextButton.icon(
-                                onPressed: () => _createSemester(academicYearId),
-                                icon: const Icon(Icons.add_circle_outline, size: 20),
-                                label: const Text('Add Semester'),
-                                style: TextButton.styleFrom(foregroundColor: Colors.teal),
                               ),
                             ],
                           ),
@@ -574,74 +624,96 @@ class _AcademicYearScreenState extends State<AcademicYearScreen> {
                                   final startDate = (semData['startDate'] as Timestamp?)?.toDate();
                                   final endDate = (semData['endDate'] as Timestamp?)?.toDate();
 
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey[200]!),
-                                    ),
-                                    child: ListTile(
-                                      visualDensity: VisualDensity.compact,
-                                      leading: CircleAvatar(
-                                        radius: 14,
-                                        backgroundColor: semIsActive ? Colors.teal : Colors.grey[400],
-                                        child: Text(
-                                          '${semData['semesterNumber']}',
-                                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                                    // Premium Semester Card
+                                    return Card(
+                                      elevation: 2,
+                                      margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                        side: BorderSide(color: semIsActive ? Colors.teal.withOpacity(0.5) : Colors.grey.withOpacity(0.2)),
+                                      ),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Row(
+                                          children: [
+                                            // Icon / Number
+                                            Container(
+                                              width: 40,
+                                              height: 40,
+                                              decoration: BoxDecoration(
+                                                color: semIsActive ? Colors.teal.withOpacity(0.1) : Colors.grey.withOpacity(0.1),
+                                                borderRadius: BorderRadius.circular(8),
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  '${semData['semesterNumber']}',
+                                                  style: TextStyle(
+                                                    color: semIsActive ? Colors.teal : Colors.grey[700],
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 16),
+                                            
+                                            // Details
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    'Semester ${semData['semesterNumber']}',
+                                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                                  ),
+                                                  const SizedBox(height: 4),
+                                                  Row(
+                                                    children: [
+                                                      Icon(Icons.calendar_today, size: 12, color: Colors.grey[600]),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        startDate != null && endDate != null
+                                                            ? '${DateFormat('MMM yyyy').format(startDate)} - ${DateFormat('MMM yyyy').format(endDate)}'
+                                                            : 'Dates not set',
+                                                        style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+
+                                            // Actions
+                                            Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Transform.scale(
+                                                  scale: 0.8,
+                                                  child: Switch(
+                                                    value: semIsActive,
+                                                    onChanged: (val) => _toggleSemester(semDoc.id, semIsActive),
+                                                    activeColor: Colors.teal,
+                                                  ),
+                                                ),
+                                                IconButton(
+                                                  icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueAccent),
+                                                  onPressed: () => _editSemester(semDoc.id, semData),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                IconButton(
+                                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                                                  onPressed: () => _deleteSemester(semDoc.id),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints: const BoxConstraints(),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      title: Text(
-                                        'Semester ${semData['semesterNumber']}',
-                                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-                                      ),
-                                      subtitle: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            'Batch: ${data['name']}',
-                                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.indigo),
-                                          ),
-                                          if (semData['academicSession'] != null && semData['academicSession'].toString().isNotEmpty)
-                                            Text(
-                                              'Session: ${semData['academicSession']}',
-                                              style: const TextStyle(fontSize: 11, color: Colors.teal),
-                                            ),
-                                          Text(
-                                            startDate != null && endDate != null
-                                                ? '${DateFormat('dd/MM/yyyy').format(startDate)} - ${DateFormat('dd/MM/yyyy').format(endDate)}'
-                                                : 'Dates not set',
-                                            style: const TextStyle(fontSize: 12),
-                                          ),
-                                        ],
-                                      ),
-                                      trailing: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Transform.scale(
-                                            scale: 0.7,
-                                            child: Switch(
-                                              value: semIsActive,
-                                              onChanged: (val) => _toggleSemester(semDoc.id, semIsActive),
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.edit, size: 18, color: Colors.blue),
-                                            onPressed: () => _editSemester(semDoc.id, semData),
-                                            constraints: const BoxConstraints(),
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete, size: 18, color: Colors.red),
-                                            onPressed: () => _deleteSemester(semDoc.id),
-                                            constraints: const BoxConstraints(),
-                                            padding: EdgeInsets.zero,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
+                                    );
                                 }).toList(),
                               );
                             },

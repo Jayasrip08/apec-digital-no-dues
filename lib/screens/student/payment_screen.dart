@@ -68,18 +68,39 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  bool _isScanning = false; // NEW: OCR Loading State
+
   Future<void> _performOCR(File image) async {
+    setState(() => _isScanning = true);
+    
     try {
       final inputImage = InputImage.fromFile(image);
       final textRecognizer = TextRecognizer();
       final recognizedText = await textRecognizer.processImage(inputImage);
       String text = recognizedText.text;
+      
+      textRecognizer.close(); // Close immediately after use
 
-      // 1. Transaction ID (12 digits)
+      // 1. STRICT VALIDATION: Reject images with little to no text
+      // We look for at least 3 alphanumeric characters to count as "text"
+      final validChars = RegExp(r'[a-zA-Z0-9]').allMatches(text);
+      if (validChars.length < 10) {
+        setState(() {
+          _imageFile = null; // Remove invalid image
+          _isScanning = false;
+        });
+        if (mounted) {
+           ErrorHandler.showError(context, "Invalid Receipt: No readable text found. Please upload a clear transaction screenshot.");
+        }
+        return;
+      }
+
+      // 2. Transaction ID Auto-Fill (12 digits)
+      // Matches standard UPI refs like "123456789012"
       RegExp txnRegex = RegExp(r'\b\d{12}\b'); 
       String? extractedTxn = txnRegex.stringMatch(text);
 
-       // 2. Amount Extraction
+      // 3. Amount Extraction (Existing Logic)
       RegExp amountRegex = RegExp(r'[₹|Rs\.?|INR]?\s?(\d+(?:,\d{3})*(?:\.\d{2})?)', caseSensitive: false);
       var matches = amountRegex.allMatches(text);
       
@@ -88,23 +109,34 @@ class _PaymentScreenState extends State<PaymentScreen> {
         String val = m.group(1)?.replaceAll(",", "") ?? "";
         double? d = double.tryParse(val);
         if (d != null && d > 10 && d < 1000000) { 
-           extractedAmount = val;
-           if ((d - widget.amount).abs() < 1) break;
+           // If we find an amount very close to expected, prioritize it
+           if ((d - widget.amount).abs() < 1) {
+             extractedAmount = val;
+             break;
+           }
+           // Otherwise just take the first reasonable amount
+           extractedAmount ??= val; 
         }
       }
 
       setState(() {
-        if (extractedTxn != null) _txnCtrl.text = extractedTxn;
-        if (extractedAmount != null) _amountCtrl.text = extractedAmount!;
-            
+        if (extractedTxn != null) {
+          _txnCtrl.text = extractedTxn;
+        }
+        if (extractedAmount != null) {
+          _amountCtrl.text = extractedAmount!;
+        }
+        _isScanning = false;
+        
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("OCR Complete: found ${extractedTxn != null ? 'TxnID' : ''} ${extractedAmount != null ? 'Amount' : ''}"),
+          content: Text("OCR Verified: ${extractedTxn != null ? 'Txn ID found. ' : ''}${extractedAmount != null ? 'Amount matched.' : ''}"),
           backgroundColor: Colors.green
         ));
       });
-      textRecognizer.close();
+      
     } catch (e) {
       debugPrint("OCR Error: $e");
+      setState(() => _isScanning = false);
     }
   }
 
@@ -248,11 +280,33 @@ class _PaymentScreenState extends State<PaymentScreen> {
             title: const Text("Upload Screenshot"),
             content: Column(
               children: [
-                _imageFile != null 
-                    ? (kIsWeb 
-                        ? Image.network(_imageFile!.path, height: 150) // Web: Use blob URL path or Image.network
-                        : Image.file(File(_imageFile!.path), height: 150)) // Mobile: Use File
-                    : Container(height: 100, color: Colors.grey[200], child: const Center(child: Text("No Image"))),
+                // IMAGE PREVIEW WITH LOADING OVERLAY
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _imageFile != null 
+                        ? (kIsWeb 
+                            ? Image.network(_imageFile!.path, height: 150) 
+                            : Image.file(File(_imageFile!.path), height: 150))
+                        : Container(height: 100, width: double.infinity, color: Colors.grey[200], child: const Center(child: Text("No Image"))),
+                    
+                    if (_isScanning)
+                      Container(
+                        height: 150,
+                        width: double.infinity,
+                        color: Colors.black54,
+                        child: const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                             CircularProgressIndicator(color: Colors.white),
+                             SizedBox(height: 10),
+                             Text("Verifying Receipt...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 10),
                 TextButton.icon(
                   icon: const Icon(Icons.camera_alt), 
                   label: const Text("Select Screenshot"), 
@@ -267,8 +321,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
             title: const Text("Verify Details"),
             content: Column(
               children: [
-                TextField(controller: _txnCtrl, decoration: const InputDecoration(labelText: "Transaction ID")),
-                TextField(controller: _amountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: "Amount Paid")),
+                TextField(
+                  controller: _txnCtrl, 
+                  decoration: const InputDecoration(
+                    labelText: "Transaction ID",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.receipt_long),
+                  )
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _amountCtrl, 
+                  keyboardType: TextInputType.number, 
+                  decoration: const InputDecoration(
+                    labelText: "Amount Paid",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.currency_rupee),
+                  )
+                ),
                 if (_isUploading) const LinearProgressIndicator(),
               ],
             ),

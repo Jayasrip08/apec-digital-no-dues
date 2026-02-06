@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserApprovalScreen extends StatelessWidget {
-  const UserApprovalScreen({super.key});
+  final Widget? drawer;
+  const UserApprovalScreen({super.key, this.drawer});
 
   Future<void> _approveUser(BuildContext context, String uid, String name) async {
     try {
@@ -62,6 +63,7 @@ class UserApprovalScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Pending Approvals")),
+      drawer: drawer,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')

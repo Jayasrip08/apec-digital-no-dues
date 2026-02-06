@@ -5,7 +5,8 @@ import '../../widgets/deadline_widget.dart';
 import '../../services/email_service.dart';
 
 class OverduePaymentsScreen extends StatefulWidget {
-  const OverduePaymentsScreen({super.key});
+  final Widget? drawer;
+  const OverduePaymentsScreen({super.key, this.drawer});
 
   @override
   State<OverduePaymentsScreen> createState() => _OverduePaymentsScreenState();
@@ -90,6 +91,7 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
         title: const Text('Overdue Payments'),
         backgroundColor: Colors.indigo,
       ),
+      drawer: widget.drawer,
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isSendingEmails ? null : _sendReminderEmails,
         backgroundColor: Colors.orange,
@@ -105,7 +107,6 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('fee_structures')
-            .where('deadline', isLessThan: Timestamp.now())
             .where('isActive', isEqualTo: true)
             .snapshots(),
         builder: (context, feeSnapshot) {
@@ -114,28 +115,28 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
           }
 
           if (!feeSnapshot.hasData || feeSnapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No active fee structures"));
+          }
+
+          // Client-side filter for overdue items
+          final overdueFees = feeSnapshot.data!.docs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final deadline = (data['deadline'] as Timestamp).toDate();
+            return deadline.isBefore(DateTime.now());
+          }).toList();
+
+          if (overdueFees.isEmpty) {
             return const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.check_circle, size: 64, color: Colors.green),
-                  SizedBox(height: 16),
-                  Text(
-                    'No overdue payments!',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'All deadlines are current',
-                    style: TextStyle(color: Colors.grey),
-                  ),
+                   Icon(Icons.check_circle, size: 64, color: Colors.green),
+                   SizedBox(height: 16),
+                   Text('No overdue payments!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
               ),
             );
           }
-
-          // Get all overdue fee structures
-          final overdueFees = feeSnapshot.data!.docs;
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),

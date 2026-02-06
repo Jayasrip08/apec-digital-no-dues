@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  final Widget? drawer;
+  const ProfileScreen({super.key, this.drawer});
 
   @override
   Widget build(BuildContext context) {
@@ -20,6 +21,7 @@ class ProfileScreen extends StatelessWidget {
         foregroundColor: Colors.white,
         elevation: 0,
       ),
+      drawer: drawer,
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('users').doc(user.uid).get(),
         builder: (context, snapshot) {

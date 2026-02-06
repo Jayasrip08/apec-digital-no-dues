@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 
 class ViewFeesScreen extends StatefulWidget {
-  const ViewFeesScreen({super.key});
+  final Widget? drawer;
+  const ViewFeesScreen({super.key, this.drawer});
 
   @override
   State<ViewFeesScreen> createState() => _ViewFeesScreenState();
@@ -138,6 +139,7 @@ class _ViewFeesScreenState extends State<ViewFeesScreen> {
         title: const Text('View Fee Structures'),
         backgroundColor: Colors.indigo,
       ),
+      drawer: widget.drawer,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('fee_structures')

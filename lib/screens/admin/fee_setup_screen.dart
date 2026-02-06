@@ -5,7 +5,8 @@ import 'package:intl/intl.dart';
 import '../../services/fee_service.dart';
 
 class FeeSetupScreen extends StatefulWidget {
-  const FeeSetupScreen({super.key});
+  final Widget? drawer;
+  const FeeSetupScreen({super.key, this.drawer});
 
   @override
   State<FeeSetupScreen> createState() => _FeeSetupScreenState();
@@ -55,6 +56,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
           _activeBatches = snapshot.docs.map((doc) => doc['name'] as String).toList();
           if (_activeBatches.isNotEmpty) {
             _batch = _activeBatches.first;
+            _loadExistingStructure(); // Load initial data
           }
           _loadingBatches = false;
         });
@@ -66,6 +68,56 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
           SnackBar(content: Text('Error loading batches: $e')),
         );
       }
+    }
+  }
+
+  Future<void> _loadExistingStructure() async {
+    if (_batch.isEmpty) return;
+    
+    setState(() => _isLoading = true);
+    
+    try {
+      final existingStructures = await FirebaseFirestore.instance
+          .collection('fee_structures')
+          .where('academicYear', isEqualTo: _batch)
+          .where('dept', isEqualTo: _dept)
+          .where('quotaCategory', isEqualTo: _quota)
+          .where('semester', isEqualTo: _semester)
+          .where('isActive', isEqualTo: true)
+          .get();
+
+      if (existingStructures.docs.isNotEmpty) {
+        final data = existingStructures.docs.first.data();
+        final components = data['components'] as Map<String, dynamic>? ?? {};
+        final deadline = data['deadline'] as Timestamp?;
+
+        setState(() {
+          _controllers.clear();
+          _busFeePlaces.clear();
+          _deadline = deadline?.toDate();
+
+          components.forEach((key, value) {
+            if (key == 'Bus Fee' && value is Map) {
+              value.forEach((place, amt) {
+                _busFeePlaces[place] = TextEditingController(text: amt.toString());
+              });
+            } else if (value is num) {
+              _controllers[key] = TextEditingController(text: value.toString());
+            }
+          });
+          _isLoading = false;
+        });
+      } else {
+        // No existing structure, reset to defaults
+        setState(() {
+          _resetControllers();
+          _deadline = null;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      debugPrint('Error loading existing structure: $e');
     }
   }
 
@@ -117,7 +169,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
       }
     });
 
-    // Add bus fee places as nested map
+    // Add bus fee places
     if (_busFeePlaces.isNotEmpty) {
       Map<String, double> busFeeMap = {};
       _busFeePlaces.forEach((place, ctrl) {
@@ -137,12 +189,11 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
       setState(() => _isLoading = false);
       return;
     }
-    
-    // Calculate total (handle nested bus fee)
+
+    // Calculate total
     double total = 0;
     components.forEach((key, value) {
       if (value is Map) {
-        // Bus fee - sum all places
         (value as Map).values.forEach((amt) => total += (amt as num).toDouble());
       } else {
         total += (value as num).toDouble();
@@ -150,7 +201,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
     });
 
     try {
-      // Mark all previous structures for this criteria as inactive
+      // 1. Mark existing structures for this criteria as inactive
       final existingStructures = await FirebaseFirestore.instance
           .collection('fee_structures')
           .where('academicYear', isEqualTo: _batch)
@@ -160,12 +211,11 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
           .where('isActive', isEqualTo: true)
           .get();
 
-      // Deactivate old structures
       for (var doc in existingStructures.docs) {
         await doc.reference.update({'isActive': false});
       }
 
-      // Create new structure with versioning
+      // 2. Save NEW structure
       await FirebaseFirestore.instance.collection('fee_structures').add({
         'academicYear': _batch,
         'dept': _dept,
@@ -176,6 +226,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
         'deadline': _deadline != null ? Timestamp.fromDate(_deadline!) : null,
         'isActive': true,
         'createdAt': FieldValue.serverTimestamp(),
+        'lastUpdated': FieldValue.serverTimestamp(),
         'createdBy': FirebaseAuth.instance.currentUser?.uid,
       });
 
@@ -183,7 +234,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Fee Structure Saved! Previous versions archived.')),
+          const SnackBar(content: Text('Fee Structure Saved Successfully!')),
         );
       }
     } catch (e) {
@@ -200,6 +251,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Configure Semester Fees")),
+      drawer: widget.drawer,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -228,13 +280,25 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
                                 style: TextStyle(color: Colors.orange, fontSize: 12),
                               ),
                             )
-                          : _buildDropdown("Batch", _activeBatches, _batch, (v) => setState(() => _batch = v!)),
-                      _buildDropdown("Dept", ['All', 'CSE', 'ECE', 'MECH', 'CIVIL', 'IT'], _dept, (v) => setState(() => _dept = v!)),
+                          : _buildDropdown("Batch", _activeBatches, _batch, (v) {
+                                setState(() => _batch = v!);
+                                _loadExistingStructure();
+                              }),
+                      _buildDropdown("Dept", ['All', 'CSE', 'ECE', 'MECH', 'CIVIL', 'IT'], _dept, (v) {
+                        setState(() => _dept = v!);
+                        _loadExistingStructure();
+                      }),
                     ),
                     const SizedBox(height: 10),
                     _buildRow(
-                      _buildDropdown("Quota", ['All', 'Management', 'Counseling', 'SC_ST', '7.5%'], _quota, (v) => setState(() => _quota = v!)),
-                      _buildDropdown("Semester", ['1', '2', '3', '4', '5', '6', '7', '8'], _semester, (v) => setState(() => _semester = v!)),
+                      _buildDropdown("Quota", ['All', 'Management', 'Counseling', 'SC_ST', '7.5%'], _quota, (v) {
+                        setState(() => _quota = v!);
+                        _loadExistingStructure();
+                      }),
+                      _buildDropdown("Semester", ['1', '2', '3', '4', '5', '6', '7', '8'], _semester, (v) {
+                        setState(() => _semester = v!);
+                        _loadExistingStructure();
+                      }),
                     ),
                     const SizedBox(height: 10),
                     ListTile(
