@@ -97,8 +97,14 @@ class UserApprovalScreen extends StatelessWidget {
               final uid = users[index].id;
               final name = user['name'] ?? 'Unknown';
               final email = user['email'] ?? 'No Email';
-              final role = user['role']?.toString().toUpperCase() ?? 'UNKNOWN';
-              final details = user['employeeId'] ?? user['dept'] ?? 'No Details';
+              final role = (user['role'] ?? 'student').toString().toUpperCase();
+              
+              String details = '';
+              if (role == 'STUDENT') {
+                details = "Reg No: ${user['regNo'] ?? user['registerNo'] ?? 'N/A'}\nDept: ${user['dept'] ?? 'N/A'}";
+              } else {
+                details = "Emp ID: ${user['employeeId'] ?? 'N/A'}\nDept: ${user['dept'] ?? 'N/A'}";
+              }
 
               return Card(
                 child: ListTile(

@@ -132,9 +132,18 @@ class _SemesterDetailScreenState extends State<SemesterDetailScreen> {
                 const Text("Fee Components", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 10),
                 if (_feeComponents.isEmpty)
-                   const Padding(
-                     padding: EdgeInsets.all(20),
-                     child: Text("No fees configured for this semester yet.", style: TextStyle(fontStyle: FontStyle.italic)),
+                   Padding(
+                     padding: const EdgeInsets.all(20),
+                     child: Column(
+                       children: [
+                         const Text("No fees configured for this semester yet.", style: TextStyle(fontStyle: FontStyle.italic)),
+                         const SizedBox(height: 10),
+                         Text(
+                           "Your Profile: ${widget.userData['dept']} | ${widget.userData['quotaCategory']} | ${widget.userData['batch']}",
+                           style: TextStyle(fontSize: 12, color: Colors.indigo[300]),
+                         ),
+                       ],
+                     ),
                    )
                 else
                   ..._feeComponents.entries.map((entry) => _buildFeeItem(entry.key, entry.value)).toList(),
@@ -149,8 +158,13 @@ class _SemesterDetailScreenState extends State<SemesterDetailScreen> {
     int paidCount = _paymentStatus.values.where((p) => p['status'] == 'verified').length;
     int totalCount = _feeComponents.length;
     
+    bool isFullyPaid = paidCount == totalCount && totalCount > 0;
+    bool isOverdue = !isFullyPaid && _deadline != null && DateTime.now().isAfter(_deadline!);
+
+    Color cardColor = isOverdue ? Colors.red.shade700 : Colors.indigo;
+
     return Card(
-      color: Colors.indigo,
+      color: cardColor,
       child: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -163,10 +177,16 @@ class _SemesterDetailScreenState extends State<SemesterDetailScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.calendar_today, color: Colors.white70, size: 16),
+                    Icon(
+                      isOverdue ? Icons.error_outline : Icons.calendar_today, 
+                      color: Colors.white, 
+                      size: 16
+                    ),
                     const SizedBox(width: 8),
                     Text(
-                      "Due by: ${DateFormat('dd MMM yyyy').format(_deadline!)}",
+                      isOverdue 
+                        ? "Overdue! Was due on: ${DateFormat('dd MMM yyyy').format(_deadline!)}"
+                        : "Due by: ${DateFormat('dd MMM yyyy').format(_deadline!)}",
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -177,7 +197,7 @@ class _SemesterDetailScreenState extends State<SemesterDetailScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text("Progress: $paidCount / $totalCount Paid", style: const TextStyle(color: Colors.white)),
-                if (paidCount == totalCount && totalCount > 0)
+                if (isFullyPaid)
                   ElevatedButton.icon(
                     onPressed: () {
                       // Build map of only paid fees

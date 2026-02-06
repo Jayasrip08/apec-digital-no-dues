@@ -97,7 +97,10 @@ APEC Administration
 
       for (var feeDoc in activeStructures.docs) {
         final feeData = feeDoc.data();
-        final deadline = (feeData['deadline'] as Timestamp).toDate();
+        final Timestamp? ts = feeData['deadline'] as Timestamp?;
+        if (ts == null) continue; // Skip if no deadline set
+        
+        final deadline = ts.toDate();
         
         // Skip if not yet overdue
         if (deadline.isAfter(DateTime.now())) continue;
@@ -108,10 +111,13 @@ APEC Administration
         final totalAmount = (feeData['totalAmount'] ?? 0).toDouble();
 
         // Get students matching this fee structure
-        var studentsQuery = _db
+        Query<Map<String, dynamic>> studentsQuery = _db
             .collection('users')
-            .where('role', isEqualTo: 'student')
-            .where('dept', isEqualTo: dept);
+            .where('role', isEqualTo: 'student');
+            
+        if (dept != 'All') {
+          studentsQuery = studentsQuery.where('dept', isEqualTo: dept);
+        }
 
         final students = await studentsQuery.get();
 

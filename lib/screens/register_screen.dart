@@ -122,7 +122,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _handleRegister() async {
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      if (_selectedRole == 'student' && _selectedBatch.isEmpty) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot register student without an active batch. Please contact admin.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
 
       // Call Auth Service
       String? error = await AuthService().registerUser(
@@ -257,6 +263,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             items: _activeBatches.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                             onChanged: (val) => setState(() => _selectedBatch = val.toString()),
+                          )
+                        else if (!_loadingBatches)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(12)),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.error_outline, color: Colors.red),
+                                SizedBox(width: 8),
+                                Expanded(child: Text("No active batches found. Admin must create/activate an academic year before students can register.", style: TextStyle(color: Colors.red, fontSize: 12))),
+                              ],
+                            ),
                           ),
                         const SizedBox(height: 16),
                         StreamBuilder<QuerySnapshot>(

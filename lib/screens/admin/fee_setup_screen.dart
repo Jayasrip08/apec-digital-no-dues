@@ -37,6 +37,8 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
     'Library Fee', 'Association Fee', 'Training Fee', 'Book Fee'
   ];
 
+  bool _isEditing = false; // Track if we are editing an existing record
+
   @override
   void initState() {
     super.initState();
@@ -92,6 +94,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
         final deadline = data['deadline'] as Timestamp?;
 
         setState(() {
+          _isEditing = true; // Data loaded from DB
           _controllers.clear();
           _busFeePlaces.clear();
           _deadline = deadline?.toDate();
@@ -110,6 +113,7 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
       } else {
         // No existing structure, reset to defaults
         setState(() {
+          _isEditing = false; // Fresh start
           _resetControllers();
           _deadline = null;
           _isLoading = false;
@@ -257,6 +261,16 @@ class _FeeSetupScreenState extends State<FeeSetupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // STATUS INDICATOR
+            Align(
+              alignment: Alignment.centerRight,
+              child: Chip(
+                label: Text(_isEditing ? "Editing Saved Fees" : "New Fee Structure", style: const TextStyle(fontWeight: FontWeight.bold)),
+                backgroundColor: _isEditing ? Colors.amber[100] : Colors.green[100],
+                avatar: Icon(_isEditing ? Icons.edit : Icons.add, size: 18, color: _isEditing ? Colors.orange : Colors.green),
+              ),
+            ),
+            
             // FILTERS CARD
             Card(
               elevation: 4,

@@ -84,7 +84,12 @@ class _StudentDashboardState extends State<StudentDashboard> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Please contact admin',
+                        'Batch: ${_userData!['batch'] ?? "Not Assigned"}',
+                        style: TextStyle(fontSize: 14, color: Colors.indigo, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Please contact admin to activate your semester.',
                         style: TextStyle(fontSize: 14, color: Colors.grey[500]),
                       ),
                     ],

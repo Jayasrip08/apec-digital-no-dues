@@ -65,7 +65,7 @@ class PdfService {
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
                           pw.Text(entry.key),
-                          pw.Text("₹ ${entry.value.toStringAsFixed(0)}"),
+                          pw.Text("Rs. ${entry.value.toStringAsFixed(0)}"),
                         ],
                       ),
                     )).toList(),
@@ -75,7 +75,7 @@ class PdfService {
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
                         pw.Text("Total Paid", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                        pw.Text("₹ ${totalPaid.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                        pw.Text("Rs. ${totalPaid.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
                       ],
                     ),
                   ],
@@ -152,9 +152,9 @@ class PdfService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
                 children: [
                   pw.Column(children: [pw.Text("Total Students"), pw.Text("${students.length}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))]),
-                  pw.Column(children: [pw.Text("Total Expected"), pw.Text("₹ ${totalExpected.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))]),
-                  pw.Column(children: [pw.Text("Verified Collected"), pw.Text("₹ ${totalCollected.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green))]),
-                  pw.Column(children: [pw.Text("Total Pending"), pw.Text("₹ ${totalPending.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.red))]),
+                  pw.Column(children: [pw.Text("Total Expected"), pw.Text("Rs. ${totalExpected.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold))]),
+                  pw.Column(children: [pw.Text("Verified Collected"), pw.Text("Rs. ${totalCollected.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green))]),
+                  pw.Column(children: [pw.Text("Total Pending"), pw.Text("Rs. ${totalPending.toStringAsFixed(0)}", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.red))]),
                 ],
               ),
             ),

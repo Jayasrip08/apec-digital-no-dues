@@ -11,6 +11,33 @@ class ViewFeesScreen extends StatefulWidget {
 }
 
 class _ViewFeesScreenState extends State<ViewFeesScreen> {
+  bool _showHistory = false;
+  List<String> _allBatches = [];
+  List<String> _activeBatches = [];
+  String? _selectedBatch;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBatches();
+  }
+
+  Future<void> _loadBatches() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('academic_years')
+        .orderBy('name', descending: true)
+        .get();
+    
+    if (mounted) {
+      setState(() {
+        _allBatches = snapshot.docs.map((doc) => doc.id).toList();
+        _activeBatches = snapshot.docs
+            .where((doc) => doc.data()['isActive'] == true)
+            .map((doc) => doc.id)
+            .toList();
+      });
+    }
+  }
   Future<void> _deleteStructure(String docId) async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -138,6 +165,35 @@ class _ViewFeesScreenState extends State<ViewFeesScreen> {
       appBar: AppBar(
         title: const Text('View Fee Structures'),
         backgroundColor: Colors.indigo,
+        actions: [
+          if (_allBatches.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: DropdownButton<String?>(
+                value: _selectedBatch,
+                hint: const Text("Batch", style: TextStyle(color: Colors.white70, fontSize: 12)),
+                dropdownColor: Colors.indigo,
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                underline: Container(),
+                icon: const Icon(Icons.filter_alt, color: Colors.white70, size: 18),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text("All Batches")),
+                  ..._allBatches.map((batch) => DropdownMenuItem(value: batch, child: Text(batch))),
+                ],
+                onChanged: (val) => setState(() => _selectedBatch = val),
+              ),
+            ),
+          Row(
+            children: [
+              const Text("History", style: TextStyle(fontSize: 12, color: Colors.white70)),
+              Switch(
+                value: _showHistory,
+                activeColor: Colors.white,
+                onChanged: (val) => setState(() => _showHistory = val),
+              ),
+            ],
+          ),
+        ],
       ),
       drawer: widget.drawer,
       body: StreamBuilder<QuerySnapshot>(
@@ -157,12 +213,52 @@ class _ViewFeesScreenState extends State<ViewFeesScreen> {
                 children: [
                   Icon(Icons.inbox, size: 80, color: Colors.grey[400]),
                   const SizedBox(height: 16),
-                  Text(
+                  const Text(
                     'No fee structures found',
+                    style: TextStyle(fontSize: 18, color: Colors.grey, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          final allDocs = snapshot.data!.docs;
+          final displayedDocs = allDocs.where((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            final batchId = data['academicYear'] ?? '';
+            
+            // 1. Filter by specific chosen batch
+            if (_selectedBatch != null) {
+              return batchId == _selectedBatch;
+            }
+
+            // 2. If no batch selected, check History toggle
+            if (_showHistory) {
+              return true; // Show everything
+            } else {
+              // Show only active versions in active batches
+              final bool isVersionActive = data['isActive'] ?? true;
+              final bool isBatchActive = _activeBatches.contains(batchId);
+              return isVersionActive && isBatchActive;
+            }
+          }).toList();
+
+          if (displayedDocs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.filter_list_off, size: 80, color: Colors.grey[400]),
+                  const SizedBox(height: 16),
+                  Text(
+                    _showHistory ? 'No structures found' : 'No active fee structures found',
                     style: TextStyle(fontSize: 18, color: Colors.grey[600]),
                   ),
-                  const SizedBox(height: 8),
-                  const Text('Create fee structures from the Configure Fees screen'),
+                  if (!_showHistory)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('Toggle "History" to see old/inactive fees'),
+                    ),
                 ],
               ),
             );
@@ -170,9 +266,9 @@ class _ViewFeesScreenState extends State<ViewFeesScreen> {
 
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: snapshot.data!.docs.length,
+            itemCount: displayedDocs.length,
             itemBuilder: (context, index) {
-              final doc = snapshot.data!.docs[index];
+              final doc = displayedDocs[index];
               final data = doc.data() as Map<String, dynamic>;
               final components = data['components'] as Map<String, dynamic>? ?? {};
               final total = data['totalAmount'] ?? data['amount'] ?? 0.0;

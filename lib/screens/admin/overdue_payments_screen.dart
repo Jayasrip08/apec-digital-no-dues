@@ -121,8 +121,9 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
           // Client-side filter for overdue items
           final overdueFees = feeSnapshot.data!.docs.where((doc) {
             final data = doc.data() as Map<String, dynamic>;
-            final deadline = (data['deadline'] as Timestamp).toDate();
-            return deadline.isBefore(DateTime.now());
+            final Timestamp? ts = data['deadline'] as Timestamp?;
+            if (ts == null) return false; // No deadline = not overdue
+            return ts.toDate().isBefore(DateTime.now());
           }).toList();
 
           if (overdueFees.isEmpty) {
@@ -143,7 +144,8 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
             itemCount: overdueFees.length,
             itemBuilder: (context, index) {
               final feeData = overdueFees[index].data() as Map<String, dynamic>;
-              final deadline = (feeData['deadline'] as Timestamp).toDate();
+              final Timestamp? ts = feeData['deadline'] as Timestamp?;
+              final DateTime deadline = ts?.toDate() ?? DateTime.now();
               final dept = feeData['dept'] ?? '';
               final quota = feeData['quotaCategory'] ?? '';
               final amount = feeData['totalAmount'] ?? feeData['amount'] ?? 0;
@@ -215,12 +217,17 @@ class _OverduePaymentsScreenState extends State<OverduePaymentsScreen> {
   }
 
   Widget _buildOverdueStudentsList(String dept, String quota, String semester, double totalFeeAmount) {
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'student');
+
+    // Only filter by Dept if it's NOT 'All'
+    if (dept != 'All') {
+      query = query.where('dept', isEqualTo: dept);
+    }
+
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .where('role', isEqualTo: 'student')
-          .where('dept', isEqualTo: dept) // Keep dept filter
-          .snapshots(),
+      stream: query.snapshots(),
       builder: (context, studentSnapshot) {
         if (!studentSnapshot.hasData) {
           return const CircularProgressIndicator();

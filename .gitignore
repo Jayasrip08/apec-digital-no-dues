@@ -45,19 +45,19 @@ app.*.map.json
 /android/app/release
 
 # Environment variables and secrets
-.env
-.env.local
-.env.*.local
-*.key
-*.pem
-secrets/
+# .env
+# .env.local
+# .env.*.local
+# *.key
+# *.pem
+# secrets/
 
 # Firebase
-firebase-debug.log
-firestore-debug.log
-ui-debug.log
-.firebase/
-extensions/
+# firebase-debug.log
+# firestore-debug.log
+# ui-debug.log
+# .firebase/
+# extensions/
 
 # Node modules (for Firebase Functions)
 **/node_modules/
